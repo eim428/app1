@@ -1158,8 +1158,8 @@ def app_supermarket():
 
 
         # Routing Logic
-        if menu == "Dashboard": #show_dashboard()
-            st.write("Dashboard (Admin Only)")
+        if menu == "Dashboard": show_dashboard()
+            #st.write("Dashboard (Admin Only)")
         elif menu == "Forecasting": #show_forecasting()
             st.write("Forecasting (Admin Only)")
         elif menu == "Transaction": show_pos()
