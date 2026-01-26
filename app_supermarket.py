@@ -3,13 +3,13 @@ import pandas as pd
 import sqlite3
 import os
 import json
-
+import math
 import io
 import altair as alt
 import base64
 #import openpyxl
 import hashlib
-#import plotly.express as px
+import plotly.express as px
 #import streamlit_highcharts as hg
 #from reportlab.pdfgen import canvas
 from datetime import datetime #, timedelta
@@ -1059,6 +1059,67 @@ def login_user(username, password):
             return True, db_role
     return False, None
 
+def get_stock_predictions():
+    conn = get_connection()
+    # Ambil data penjualan 30 hari terakhir
+    date_limit = (datetime.now()) #- timedelta(days=30)).strftime('%Y-%m-%d')
+    query = """
+        SELECT product_name, SUM(qty) as total_sold 
+        FROM trans_detail 
+        JOIN trans_master ON trans_detail.trans_id = trans_master.id
+        WHERE trans_master.date >= ?
+        GROUP BY product_name
+    """
+    df_sales = pd.read_sql(query, conn, params=[date_limit])
+    df_products = pd.read_sql("SELECT name, stock FROM products", conn)
+    conn.close()
+
+    # Gabungkan data
+    df_pred = pd.merge(df_products, df_sales, left_on='name', right_on='product_name', how='left').fillna(0)
+    
+    # Hitung Kecepatan Penjualan (Daily Velocity)
+    df_pred['daily_velocity'] = df_pred['total_sold'] / 30
+    
+    # Hitung Sisa Hari (ETA Out of Stock)
+    def calculate_eta(row):
+        if row['daily_velocity'] <= 0: return 999 # Stok aman/tidak laku
+        return math.floor(row['stock'] / row['daily_velocity'])
+
+    df_pred['days_left'] = df_pred.apply(calculate_eta, axis=1)
+    return df_pred
+
+def show_forecasting():
+    st.markdown("<h2 style='color:var(--primary); font-family:Orbitron;'>🔮 INVENTORY PREDICTION</h2>", unsafe_allow_html=True)
+
+    check_low_stock_alerts(threshold=5)    
+    
+    df_pred = get_stock_predictions()
+    
+    # Filter Barang Kritikal (Habis < 7 hari)
+    critical = df_pred[df_pred['days_left'] <= 7].sort_values('days_left')
+    
+    if not critical.empty:
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.subheader("🚨 Restock Priority (ETA < 7 Days)")
+        for _, row in critical.iterrows():
+            st.markdown(f"""
+                <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.1); padding:10px 0;">
+                    <span>{row['name']}</span>
+                    <span class="critical-alert">Habis dalam {row['days_left']} hari</span>
+                </div>
+            """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Visualisasi Proyeksi Stok
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.subheader("Stock Endurance Analysis")
+    fig = px.bar(df_pred, x='name', y='days_left', color='days_left',
+                 labels={'days_left': 'Sisa Hari (Estimasi)', 'name': 'Produk'},
+                 color_continuous_scale='RdYlGn', template="plotly_dark")
+    fig.add_hline(y=7, line_dash="dash", line_color="red", annotation_text="Danger Zone")
+    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+    st.plotly_chart(fig, width='stretch')
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # (Main Routing Logic tetap sama seperti sebelumnya)
 def app_supermarket():
@@ -1160,8 +1221,8 @@ def app_supermarket():
         # Routing Logic
         if menu == "Dashboard": show_dashboard()
             #st.write("Dashboard (Admin Only)")
-        elif menu == "Forecasting": #show_forecasting()
-            st.write("Forecasting (Admin Only)")
+        elif menu == "Forecasting": show_forecasting()
+            #st.write("Forecasting (Admin Only)")
         elif menu == "Transaction": show_pos()
         elif menu == "Inventory": show_inventory()
         elif menu == "Riwayat": show_transaction_history()
