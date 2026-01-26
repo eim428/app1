@@ -743,7 +743,7 @@ def get_contrast_color(hex_color):
     # Rumus Standar Luminance (YIQ)
     luminance = (r * 0.299 + g * 0.587 + b * 0.114) / 255
     return "white" if luminance < 0.5 else "#1e1e1e"
-_="""
+
 def generate_invoice_pdf(master_row, detail_df):
     pdf = FPDF()
     pdf.add_page()
@@ -784,7 +784,7 @@ def generate_invoice_pdf(master_row, detail_df):
     pdf.cell(45, 10, f"Rp {master_row['total']:,.0f}", 1, 1, 'R')
     
     return pdf.output(dest='S').encode('latin-1')
-"""
+
 
 def show_transaction_history():
     t = st.session_state.theme
