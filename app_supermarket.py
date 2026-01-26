@@ -17,7 +17,7 @@ from reportlab.pdfgen import canvas
 from datetime import datetime, timedelta
 from reportlab.lib.pagesizes import letter
 import streamlit.components.v1 as components
-import streamlit.runtime.scriptrunner.magic_funcs
+
 
   
 
@@ -1030,6 +1030,7 @@ def display_product_card(row):
 def generate_invoice_pdf(master_row, detail_df):
     pdf = FPDF()
     pdf.add_page()
+    pdf.a
     
     # Header Struk
     pdf.set_font("Arial", 'B', 16)
