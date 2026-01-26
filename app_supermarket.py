@@ -15,6 +15,7 @@ import streamlit_highcharts as hg
 from datetime import datetime , timedelta
 #from reportlab.lib.pagesizes import letter
 import streamlit.components.v1 as components
+from fpdf import FPDF
 
 
   
@@ -803,7 +804,7 @@ def show_transaction_history():
             st.table(detail[['product_name', 'qty', 'price', 'subtotal']])
             
             # Tombol Cetak (Reprint)
-            #pdf_data = generate_invoice_pdf(master.iloc[0], detail)
+            pdf_data = generate_invoice_pdf(master.iloc[0], detail)
             
             st.download_button(
                 label="📥 REPRINT INVOICE (PDF)",
@@ -857,9 +858,9 @@ def display_product_card(row):
     """, unsafe_allow_html=True)
 
 
-_="""
+
 def generate_invoice_pdf(master_row, detail_df):
-    #pdf = FPDF()
+    pdf = FPDF()
     pdf.add_page()
     pdf.a
     
@@ -900,7 +901,7 @@ def generate_invoice_pdf(master_row, detail_df):
     
     return pdf.output(dest='S').encode('latin-1')
 
-"""
+
 
 def get_monthly_report():
     conn = get_connection()
@@ -1188,7 +1189,7 @@ def show_accounting():
             fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, width='stretch')
             st.markdown('</div>', unsafe_allow_html=True)
-            
+
 def show_forecasting():
     st.markdown("<h2 style='color:var(--primary); font-family:Orbitron;'>🔮 INVENTORY PREDICTION</h2>", unsafe_allow_html=True)
 
