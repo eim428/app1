@@ -16,6 +16,7 @@ from datetime import datetime , timedelta
 #from reportlab.lib.pagesizes import letter
 import streamlit.components.v1 as components
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 
 
   
@@ -806,12 +807,15 @@ def show_transaction_history():
             # Tombol Cetak (Reprint)
             pdf_data = generate_invoice_pdf(master.iloc[0], detail)
             
+            #pdf_bytes = bytes(pdf.output()) 
+            
             st.download_button(
                 label="📥 REPRINT INVOICE (PDF)",
                 data=pdf_data,
                 file_name=f"Invoice_{search_id}.pdf",
                 mime="application/pdf"
             )
+
         else:
             st.error("Invoice tidak ditemukan.")
 
@@ -862,48 +866,63 @@ def display_product_card(row):
 def generate_invoice_pdf(master_row, detail_df):
     pdf = FPDF()
     pdf.add_page()
-
     
-    # Header Struk
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "FUTUREMART 2026", ln=True, align='C')
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 5, "Sistem Kasir Futuristik Terintegrasi", ln=True, align='C')
+    # --- Header Struk (FUTUREMART 2026) ---
+    pdf.set_font("helvetica", 'B', 16)
+    pdf.cell(0, 10, "FUTUREMART 2026", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.set_font("helvetica", '', 10)
+    pdf.cell(0, 5, "Sistem Kasir Futuristik Terintegrasi", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
     pdf.ln(10)
     
-    # Informasi Transaksi
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 8, f"ID INVOICE : {master_row['id']}", ln=True)
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 8, f"Tanggal    : {master_row['date']}", ln=True)
-    pdf.cell(0, 8, f"Kasir      : {master_row['cashier']}", ln=True)
+    # --- Informasi Transaksi (ID, Tanggal, Kasir) ---
+    pdf.set_font("helvetica", 'B', 10)
+    pdf.cell(0, 7, f"ID INVOICE : {master_row['id']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("helvetica", '', 10)
+    pdf.cell(0, 7, f"Tanggal    : {master_row['date']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(0, 7, f"Kasir      : {master_row['cashier']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(5)
     
-    # Tabel Header
+    # --- Tabel Header (Judul Kolom) ---
+    pdf.set_font("helvetica", 'B', 10)
     pdf.set_fill_color(200, 200, 200)
-    pdf.cell(80, 8, "Nama Produk", 1, 0, 'C', True)
-    pdf.cell(20, 8, "Qty", 1, 0, 'C', True)
-    pdf.cell(40, 8, "Harga", 1, 0, 'C', True)
-    pdf.cell(45, 8, "Subtotal", 1, 1, 'C', True)
     
-    # Tabel Detail
+    # Tentukan lebar kolom agar rapi dan berjejer
+    w_name = 85
+    w_qty = 20
+    w_price = 40
+    w_sub = 45
+
+    # Gunakan XPos.RIGHT agar kursor pindah ke kanan setelah setiap cell
+    pdf.cell(w_name, 8, "Nama Produk", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='L', fill=True)
+    pdf.cell(w_qty, 8, "Qty", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True)
+    pdf.cell(w_price, 8, "Harga", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True)
+    
+    # Gunakan XPos.LMARGIN untuk kolom terakhir agar pindah ke baris baru setelahnya
+    pdf.cell(w_sub, 8, "Subtotal", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True)
+    
+    # --- Tabel Detail (Data Produk) ---
+    pdf.set_font("helvetica", '', 10)
     for _, row in detail_df.iterrows():
-        pdf.cell(80, 8, str(row['product_name']), 1)
-        pdf.cell(20, 8, str(row['qty']), 1, 0, 'C')
-        pdf.cell(40, 8, f"Rp {row['price']:,.0f}", 1, 0, 'R')
-        pdf.cell(45, 8, f"Rp {row['subtotal']:,.0f}", 1, 1, 'R')
-    
-    # Total
+        # Data Nama Produk (Pindah kanan)
+        pdf.cell(w_name, 8, str(row['product_name']), border=1, new_x=XPos.RIGHT, new_y=YPos.TOP)
+        # Data Qty (Pindah kanan, Rata Tengah)
+        pdf.cell(w_qty, 8, str(row['qty']), border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C')
+        # Data Harga (Pindah kanan, Rata Kanan)
+        pdf.cell(w_price, 8, f"Rp {row['price']:,.0f}", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='R')
+        # Data Subtotal (Pindah baris, Rata Kanan)
+        pdf.cell(w_sub, 8, f"Rp {row['subtotal']:,.0f}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='R')
+        
+    # --- Total ---
     pdf.ln(5)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(140, 10, "GRAND TOTAL", 0, 0, 'R')
-    pdf.cell(45, 10, f"Rp {master_row['total']:,.0f}", 1, 1, 'R')
+    pdf.set_font("helvetica", 'B', 12)
+    # Total Lebar untuk label "GRAND TOTAL"
+    total_label_width = w_name + w_qty + w_price
+    pdf.cell(total_label_width, 10, "GRAND TOTAL  ", new_x=XPos.RIGHT, new_y=YPos.TOP, align='R')
+    pdf.cell(w_sub, 10, f"Rp {master_row['total']:,.0f}", border='B', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='R')
     
-    return pdf.output
+    # Mengembalikan dalam bentuk bytes untuk Streamlit (Menghindari error bytearray)
+    return bytes(pdf.output())
    
-    
-
-
 
 def get_monthly_report():
     conn = get_connection()
