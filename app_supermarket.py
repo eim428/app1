@@ -10,7 +10,7 @@ import base64
 #import openpyxl
 import hashlib
 import plotly.express as px
-#import streamlit_highcharts as hg
+import streamlit_highcharts as hg
 #from reportlab.pdfgen import canvas
 from datetime import datetime #, timedelta
 #from reportlab.lib.pagesizes import letter
@@ -318,6 +318,63 @@ def show_inventory():
         st.markdown('</div>', unsafe_allow_html=True)
 
 
+def graph_packedbubble():
+    if 'theme' not in st.session_state: return
+    t = st.session_state.get('theme', {
+        'bg_color': '#0E1117',
+        'top_bar': '#95A5A6',
+        'primary_color': '#00FFA3',
+        'font_family': 'Segoe UI',
+        'font_size': '14px'
+    })
+    sidebar_text = get_contrast_color(t['bg_color'])
+    body_text = get_contrast_color(t['body_color'])
+    btn_text_hover = get_contrast_color(t['bg_color'])
+    warna_bg = get_contrast_color(t['top_bar'])
+
+    conn = get_connection()    
+    #zx = pd.read_sql("select product_name, category,sum(qty) as jumlah from trans_detail group by product_name,category", conn)
+    query = "select category,product_name,sum(qty) as jumlah from trans_detail group by category, product_name"
+    zx = pd.read_sql(query, conn)
+
+    #result= query.fetch_veh_graph()
+    df=pd.DataFrame(zx, columns=['product_name','category','jumlah'])
+    # 2. Transform DataFrame into Highcharts series format
+    chart_data = []
+    for category in df['category'].unique():
+        subset = df[df['category'] == category]
+        data_points = subset[['category','product_name', 'jumlah']].rename(columns={'category': 'category','product_name': 'name', 'jumlah': 'value'}).to_dict('records')
+        chart_data.append({'name': category, 'data': data_points})
+        #data_points = subset[['MAKE', 'JUMLAH']].rename(columns={'MAKE': 'make', 'JUMLAH': 'jumlah'}).to_dict('records')
+        #chart_data = [{'product_name': point['product_name'],'name': point['name'], 'value': point['value']} for point in data_points]
+        
+    # 3. Define Chart Configuration
+    chartDef = { 'chart': { 'height': '60%',
+                'type': 'packedbubble',
+                'backgroundColor': t['top_bar']},
+    'plotOptions': { 'packedbubble': { 'dataLabels': { 'enabled': True,
+                                                        #'filter': { 'operator': '>',
+                                                        #            'property': 'y'
+                                                        #            'value': 10},
+                                                        'format': '{point.name}',
+                                                        'style': { 'color': 'black',
+                                                                    'fontWeight': 'normal',
+                                                                    'textOutline': 'none',
+                                                                    'backgroundColor':t['top_bar']}},
+                                        'layoutAlgorithm': { 'dragBetweenSeries': True,
+                                                            'gravitationalConstant': 0.08,
+                                                            'parentNodeLimit': True,
+                                                            'seriesInteraction': False,
+                                                            'splitSeries': True},
+                                        'maxSize': '100%',
+                                        'minSize': '20%',
+                                        'zMax': 1000,
+                                        'zMin': 0}},
+    'series': chart_data
+    }            
+    data=hg.streamlit_highcharts(chartDef,640)
+    st.markdown("##")
+    return data  
 
 def graph_bar():
     
@@ -361,6 +418,10 @@ def show_dashboard():
     if st.session_state.user_role == 'Admin':
 
         coll1,coll2=st.columns(2)
+
+        with coll1:
+            st.subheader("Product and Make by Quantity")
+            graph_packedbubble()
 
         with coll2:
             graph_bar()
