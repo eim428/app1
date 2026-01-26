@@ -808,7 +808,7 @@ def show_transaction_history():
             
             st.download_button(
                 label="📥 REPRINT INVOICE (PDF)",
-                #data=pdf_data,
+                data=pdf_data,
                 file_name=f"Invoice_{search_id}.pdf",
                 mime="application/pdf"
             )
@@ -862,7 +862,7 @@ def display_product_card(row):
 def generate_invoice_pdf(master_row, detail_df):
     pdf = FPDF()
     pdf.add_page()
-    pdf.a
+
     
     # Header Struk
     pdf.set_font("Arial", 'B', 16)
@@ -899,7 +899,9 @@ def generate_invoice_pdf(master_row, detail_df):
     pdf.cell(140, 10, "GRAND TOTAL", 0, 0, 'R')
     pdf.cell(45, 10, f"Rp {master_row['total']:,.0f}", 1, 1, 'R')
     
-    return pdf.output(dest='S').encode('latin-1')
+    return pdf.output
+   
+    
 
 
 
