@@ -12,7 +12,7 @@ import hashlib
 import plotly.express as px
 import streamlit_highcharts as hg
 #from reportlab.pdfgen import canvas
-from datetime import datetime #, timedelta
+from datetime import datetime , timedelta
 #from reportlab.lib.pagesizes import letter
 import streamlit.components.v1 as components
 
@@ -1123,7 +1123,9 @@ def login_user(username, password):
 def get_stock_predictions():
     conn = get_connection()
     # Ambil data penjualan 30 hari terakhir
-    date_limit = (datetime.now()) #- timedelta(days=30)).strftime('%Y-%m-%d')
+    date_limit = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    
+    
     query = """
         SELECT product_name, SUM(qty) as total_sold 
         FROM trans_detail 
