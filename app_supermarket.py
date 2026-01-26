@@ -7,7 +7,7 @@ import math
 import io
 import altair as alt
 import base64
-#import openpyxl
+import openpyxl
 import hashlib
 import plotly.express as px
 import streamlit_highcharts as hg
@@ -1151,6 +1151,44 @@ def get_stock_predictions():
     df_pred['days_left'] = df_pred.apply(calculate_eta, axis=1)
     return df_pred
 
+def show_accounting():
+    st.markdown("<h1 style='color:var(--primary); font-family:Orbitron;'>FINANCIAL & AUDIT</h1>", unsafe_allow_html=True)
+    conn = get_connection()
+    df_m = pd.read_sql("SELECT * FROM trans_master", conn)
+    
+    # --- TAB LAPORAN ---
+    tab1, tab2 = st.tabs(["📊 Jurnal Umum", "👥 Performa Kasir"])
+    
+    with tab1:
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.subheader("Data Transaksi")
+        st.dataframe(df_m.sort_values('date', ascending=False), width='stretch')
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with tab2:
+        st.subheader("Analisis Produktivitas Karyawan")
+        # Agregasi data per Kasir
+        cashier_perf = df_m.groupby('cashier').agg({
+            'id': 'count',
+            'total': 'sum'
+        }).rename(columns={'id': 'Total Transaksi', 'total': 'Total Omzet'}).reset_index()
+        
+        c1, c2 = st.columns([1, 1.5])
+        with c1:
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.write("Ranking Penjualan")
+            st.table(cashier_perf.sort_values('Total Omzet', ascending=False))
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with c2:
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            fig = px.bar(cashier_perf, x='cashier', y='Total Omzet', 
+                         color='Total Transaksi', title="Perbandingan Omzet Kasir",
+                         template="plotly_dark", color_continuous_scale='Viridis')
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, width='stretch')
+            st.markdown('</div>', unsafe_allow_html=True)
+            
 def show_forecasting():
     st.markdown("<h2 style='color:var(--primary); font-family:Orbitron;'>🔮 INVENTORY PREDICTION</h2>", unsafe_allow_html=True)
 
@@ -1291,10 +1329,10 @@ def app_supermarket():
         elif menu == "Riwayat": show_transaction_history()
         elif menu == "Cari Produk": show_product_search()
         elif menu == "Laporan Keuangan": show_financial_report()
-        elif menu == "Backup_DB_Online": #show_database_tools()        
-            st.write("Backup_DB_Online (Admin Only)")
-        elif menu == "Accounting": #show_accounting() 
-            st.write("Accounting Module (Admin Only)")
+        elif menu == "Backup_DB_Online": show_database_tools()        
+            #st.write("Backup_DB_Online (Admin Only)")
+        elif menu == "Accounting": show_accounting() 
+            #st.write("Accounting Module (Admin Only)")
         elif menu == "User Mgmt": show_user_mgmt()
         elif menu == "Settings": show_settings()
             #st.write("Settings Module (Admin Only)")
