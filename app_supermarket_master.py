@@ -1,19 +1,21 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
+import random
 import os
+import math
 import json
-
+#from fpdf import FPDF
 import io
 import altair as alt
 import base64
-#import openpyxl
+import openpyxl
 import hashlib
-#import plotly.express as px
-#import streamlit_highcharts as hg
-#from reportlab.pdfgen import canvas
+import plotly.express as px
+import streamlit_highcharts as hg
+from reportlab.pdfgen import canvas
 from datetime import datetime #, timedelta
-#from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter
 import streamlit.components.v1 as components
 
 
@@ -42,9 +44,143 @@ def add_user(username, password, role):
     conn.close()
 
 
+# --- 2. PREDICTION LOGIC ---
+def get_stock_predictions():
+    conn = get_connection()
+    # Ambil data penjualan 30 hari terakhir
+    date_limit = (datetime.now()) #- timedelta(days=30)).strftime('%Y-%m-%d')
+    query = """
+        SELECT product_name, SUM(qty) as total_sold 
+        FROM trans_detail 
+        JOIN trans_master ON trans_detail.trans_id = trans_master.id
+        WHERE trans_master.date >= ?
+        GROUP BY product_name
+    """
+    df_sales = pd.read_sql(query, conn, params=[date_limit])
+    df_products = pd.read_sql("SELECT name, stock FROM products", conn)
+    conn.close()
+
+    # Gabungkan data
+    df_pred = pd.merge(df_products, df_sales, left_on='name', right_on='product_name', how='left').fillna(0)
+    
+    # Hitung Kecepatan Penjualan (Daily Velocity)
+    df_pred['daily_velocity'] = df_pred['total_sold'] / 30
+    
+    # Hitung Sisa Hari (ETA Out of Stock)
+    def calculate_eta(row):
+        if row['daily_velocity'] <= 0: return 999 # Stok aman/tidak laku
+        return math.floor(row['stock'] / row['daily_velocity'])
+
+    df_pred['days_left'] = df_pred.apply(calculate_eta, axis=1)
+    return df_pred
+
+def show_forecasting():
+    st.markdown("<h2 style='color:var(--primary); font-family:Orbitron;'>🔮 INVENTORY PREDICTION</h2>", unsafe_allow_html=True)
+
+    check_low_stock_alerts(threshold=5)    
+    
+    df_pred = get_stock_predictions()
+    
+    # Filter Barang Kritikal (Habis < 7 hari)
+    critical = df_pred[df_pred['days_left'] <= 7].sort_values('days_left')
+    
+    if not critical.empty:
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.subheader("🚨 Restock Priority (ETA < 7 Days)")
+        for _, row in critical.iterrows():
+            st.markdown(f"""
+                <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.1); padding:10px 0;">
+                    <span>{row['name']}</span>
+                    <span class="critical-alert">Habis dalam {row['days_left']} hari</span>
+                </div>
+            """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Visualisasi Proyeksi Stok
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.subheader("Stock Endurance Analysis")
+    fig = px.bar(df_pred, x='name', y='days_left', color='days_left',
+                 labels={'days_left': 'Sisa Hari (Estimasi)', 'name': 'Produk'},
+                 color_continuous_scale='RdYlGn', template="plotly_dark")
+    fig.add_hline(y=7, line_dash="dash", line_color="red", annotation_text="Danger Zone")
+    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+    st.plotly_chart(fig, width='stretch')
+    st.markdown('</div>', unsafe_allow_html=True)
+
+def generate_po_pdf(supplier_name, items):
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+
+    # Header
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(50, height - 50, "PURCHASE ORDER - FUTURE MART 2026")
+    p.setFont("Helvetica", 10)
+    p.drawString(50, height - 70, f"Tanggal: {datetime.now().strftime('%d %B %Y')}")
+    p.drawString(50, height - 85, f"Kepada Yth: {supplier_name}")
+    
+    # Table Header
+    p.line(50, height - 110, 550, height - 110)
+    p.drawString(60, height - 125, "Nama Produk")
+    p.drawString(400, height - 125, "Estimasi Qty Order")
+    p.line(50, height - 135, 550, height - 135)
+
+    # Table Content
+    y = height - 155
+    for item in items:
+        p.drawString(60, y, item['name'])
+        p.drawString(400, y, f"{item['order_qty']} Unit")
+        y -= 20
+
+    # Footer
+    p.line(50, 150, 550, 150)
+    p.drawString(50, 130, "Catatan: Mohon konfirmasi ketersediaan stok segera.")
+    p.drawString(450, 80, "Manager Operasional,")
+    p.drawString(450, 40, "_________________")
+    
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+    return buffer
 
 # --- 3. UI MODULES ---
+def show_supplier_po():
+    st.markdown("<h2 style='color:var(--primary); font-family:Orbitron;'>🏭 SUPPLIER & AUTO-PO</h2>", unsafe_allow_html=True)
+    conn = get_connection()
+    
+    # Ambil data prediksi stok (dari fungsi sebelumnya)
+    # Asumsikan kita butuh restock barang yang sisa harinya < 7 hari
+    #from main_code import get_stock_predictions # Simulasi pemanggilan fungsi pred
+    df_pred = get_stock_predictions()
+    critical_items = df_pred[df_pred['days_left'] <= 7]
 
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.subheader("Otomasi Pesanan Barang")
+    
+    if not critical_items.empty:
+        sel_supp = st.selectbox("Pilih Supplier Tujuan", pd.read_sql("SELECT name FROM suppliers", conn))
+        
+        # Tabel barang yang akan di-PO
+        order_list = []
+        for _, row in critical_items.iterrows():
+            order_qty = 50  # Default restock qty
+            order_list.append({'name': row['name'], 'order_qty': order_qty})
+        
+        st.write("Daftar Barang yang direkomendasikan untuk dipesan:")
+        st.table(pd.DataFrame(order_list))
+        
+        # Tombol Generate PDF
+        pdf_file = generate_po_pdf(sel_supp, order_list)
+        st.download_button(
+            label="📄 GENERATE PURCHASE ORDER (PDF)",
+            data=pdf_file,
+            file_name=f"PO_{sel_supp}_{datetime.now().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf",
+            width='stretch'
+        )
+    else:
+        st.success("Stok masih aman. Belum ada kebutuhan Purchase Order.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def hex_to_rgba(hex_str, opacity=0.3):
@@ -216,7 +352,43 @@ def create_receipt_text(t_id, date, cashier, items, total):
     
 # --- 3. UI MODULES ---
 
+def show_accounting():
+    st.markdown("<h1 style='color:var(--primary); font-family:Orbitron;'>FINANCIAL & AUDIT</h1>", unsafe_allow_html=True)
+    conn = get_connection()
+    df_m = pd.read_sql("SELECT * FROM trans_master", conn)
+    
+    # --- TAB LAPORAN ---
+    tab1, tab2 = st.tabs(["📊 Jurnal Umum", "👥 Performa Kasir"])
+    
+    with tab1:
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.subheader("Data Transaksi")
+        st.dataframe(df_m.sort_values('date', ascending=False), width='stretch')
+        st.markdown('</div>', unsafe_allow_html=True)
 
+    with tab2:
+        st.subheader("Analisis Produktivitas Karyawan")
+        # Agregasi data per Kasir
+        cashier_perf = df_m.groupby('cashier').agg({
+            'id': 'count',
+            'total': 'sum'
+        }).rename(columns={'id': 'Total Transaksi', 'total': 'Total Omzet'}).reset_index()
+        
+        c1, c2 = st.columns([1, 1.5])
+        with c1:
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.write("Ranking Penjualan")
+            st.table(cashier_perf.sort_values('Total Omzet', ascending=False))
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with c2:
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            fig = px.bar(cashier_perf, x='cashier', y='Total Omzet', 
+                         color='Total Transaksi', title="Perbandingan Omzet Kasir",
+                         template="plotly_dark", color_continuous_scale='Viridis')
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, width='stretch')
+            st.markdown('</div>', unsafe_allow_html=True)
 
 
 #Auto Backup Cloud
@@ -317,7 +489,63 @@ def show_inventory():
                 st.error(f"Terjadi kesalahan: {e}")
         st.markdown('</div>', unsafe_allow_html=True)
 
+def graph_packedbubble():
+    if 'theme' not in st.session_state: return
+    t = st.session_state.get('theme', {
+        'bg_color': '#0E1117',
+        'top_bar': '#95A5A6',
+        'primary_color': '#00FFA3',
+        'font_family': 'Segoe UI',
+        'font_size': '14px'
+    })
+    sidebar_text = get_contrast_color(t['bg_color'])
+    body_text = get_contrast_color(t['body_color'])
+    btn_text_hover = get_contrast_color(t['bg_color'])
+    warna_bg = get_contrast_color(t['top_bar'])
 
+    conn = get_connection()    
+    #zx = pd.read_sql("select product_name, category,sum(qty) as jumlah from trans_detail group by product_name,category", conn)
+    query = "select category,product_name,sum(qty) as jumlah from trans_detail group by category, product_name"
+    zx = pd.read_sql(query, conn)
+
+    #result= query.fetch_veh_graph()
+    df=pd.DataFrame(zx, columns=['product_name','category','jumlah'])
+    # 2. Transform DataFrame into Highcharts series format
+    chart_data = []
+    for category in df['category'].unique():
+        subset = df[df['category'] == category]
+        data_points = subset[['category','product_name', 'jumlah']].rename(columns={'category': 'category','product_name': 'name', 'jumlah': 'value'}).to_dict('records')
+        chart_data.append({'name': category, 'data': data_points})
+        #data_points = subset[['MAKE', 'JUMLAH']].rename(columns={'MAKE': 'make', 'JUMLAH': 'jumlah'}).to_dict('records')
+        #chart_data = [{'product_name': point['product_name'],'name': point['name'], 'value': point['value']} for point in data_points]
+        
+    # 3. Define Chart Configuration
+    chartDef = { 'chart': { 'height': '60%',
+                'type': 'packedbubble',
+                'backgroundColor': t['top_bar']},
+    'plotOptions': { 'packedbubble': { 'dataLabels': { 'enabled': True,
+                                                        #'filter': { 'operator': '>',
+                                                        #            'property': 'y'
+                                                        #            'value': 10},
+                                                        'format': '{point.name}',
+                                                        'style': { 'color': 'black',
+                                                                    'fontWeight': 'normal',
+                                                                    'textOutline': 'none',
+                                                                    'backgroundColor':t['top_bar']}},
+                                        'layoutAlgorithm': { 'dragBetweenSeries': True,
+                                                            'gravitationalConstant': 0.08,
+                                                            'parentNodeLimit': True,
+                                                            'seriesInteraction': False,
+                                                            'splitSeries': True},
+                                        'maxSize': '100%',
+                                        'minSize': '20%',
+                                        'zMax': 1000,
+                                        'zMin': 0}},
+    'series': chart_data
+    }            
+    data=hg.streamlit_highcharts(chartDef,640)
+    st.markdown("##")
+    return data  
 
 def graph_bar():
     
@@ -362,6 +590,10 @@ def show_dashboard():
 
         coll1,coll2=st.columns(2)
 
+        with coll1:
+            st.subheader("Product and Make by Quantity")
+            graph_packedbubble()
+            
         with coll2:
             graph_bar()
     st.markdown("##")
@@ -1158,19 +1390,17 @@ def app_supermarket():
 
 
         # Routing Logic
-        if menu == "Dashboard": #show_dashboard()
-            st.write("Dashboard (Admin Only)")
-        elif menu == "Forecasting": #show_forecasting()
-            st.write("Forecasting (Admin Only)")
+        if menu == "Dashboard": show_dashboard()
+        elif menu == "Forecasting": show_forecasting()
         elif menu == "Transaction": show_pos()
         elif menu == "Inventory": show_inventory()
         elif menu == "Riwayat": show_transaction_history()
         elif menu == "Cari Produk": show_product_search()
         elif menu == "Laporan Keuangan": show_financial_report()
-        elif menu == "Backup_DB_Online": #show_database_tools()        
-            st.write("Backup_DB_Online (Admin Only)")
-        elif menu == "Accounting": #show_accounting() 
-            st.write("Accounting Module (Admin Only)")
+        elif menu == "Backup_DB_Online": show_database_tools()        
+            #st.write("Backup_DB_Online (Admin Only)")
+        elif menu == "Accounting": show_accounting() 
+            #st.write("Accounting Module (Admin Only)")
         elif menu == "User Mgmt": show_user_mgmt()
         elif menu == "Settings": show_settings()
             #st.write("Settings Module (Admin Only)")
