@@ -17,6 +17,7 @@ from datetime import datetime , timedelta
 import streamlit.components.v1 as components
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
+import time
 
 
   
@@ -256,68 +257,7 @@ def show_database_tools():
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-def show_inventory():
-    st.markdown("<h2 style='color:var(--primary); font-family:Orbitron;'>📦 INVENTORY & BULK IMPORT</h2>", unsafe_allow_html=True)
-    conn = get_connection()
-    
-    tab1, tab2, tab3 = st.tabs(["📊 Daftar Stok", "➕ Tambah Manual", "📂 Bulk Upload Excel"])
-    
-    # --- TAB 1: DAFTAR STOK ---
-    with tab1:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        df_p = pd.read_sql("SELECT * FROM products", conn)
-        edited_df = st.data_editor(df_p, num_rows="dynamic", width='stretch', key="inv_editor")
-        
-        if st.button("💾 SIMPAN SEMUA PERUBAHAN"):
-            c = conn.cursor()
-            for index, row in edited_df.iterrows():
-                c.execute("""UPDATE products SET barcode=?, name=?, category=?, price=?, stock=?, cost_price=? WHERE id=?""", 
-                          (row['barcode'], row['name'], row['category'], row['price'], row['stock'], row['cost_price'], row['id']))
-            conn.commit()
-            st.success("Database Diperbarui!")
-        st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- TAB 2: TAMBAH MANUAL (Seperti Sebelumnya) ---
-    with tab2:
-        # ... (Kode form input manual Anda) ...
-        pass
-
-    # --- TAB 3: BULK UPLOAD EXCEL ---
-    with tab3:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.subheader("Impor Produk dari Excel/CSV")
-        st.write("Pastikan file Anda memiliki kolom: **barcode, name, category, price, stock, cost_price**")
-        
-        # Template download untuk user
-        template = pd.DataFrame(columns=['barcode', 'name', 'category', 'price', 'stock', 'cost_price'])
-        st.download_button("📥 Download Template Excel", 
-                           data=template.to_csv(index=False), 
-                           file_name="template_produk.csv", mime="text/csv")
-        
-        uploaded_file = st.file_uploader("Pilih file Excel atau CSV", type=['xlsx', 'csv'])
-        
-        if uploaded_file is not None:
-            try:
-                if uploaded_file.name.endswith('.csv'):
-                    df_upload = pd.read_csv(uploaded_file)
-                else:
-                    df_upload = pd.read_excel(uploaded_file)
-                
-                st.write("Preview Data yang akan diimpor:")
-                st.dataframe(df_upload.head(), width='stretch')
-                
-                if st.button("🚀 KONFIRMASI IMPOR DATA"):
-                    c = conn.cursor()
-                    for _, row in df_upload.iterrows():
-                        c.execute("""INSERT INTO products (barcode, name, category, price, stock, cost_price) 
-                                     VALUES (?,?,?,?,?)""", 
-                                  (str(row['barcode']), row['name'], row['category'], row['price'], row['stock'],row['cost_price']))
-                    conn.commit()
-                    st.success(f"Berhasil mengimpor {len(df_upload)} produk!")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Terjadi kesalahan: {e}")
-        st.markdown('</div>', unsafe_allow_html=True)
 
 
 def graph_packedbubble():
@@ -374,9 +314,90 @@ def graph_packedbubble():
                                         'zMin': 0}},
     'series': chart_data
     }            
-    data=hg.streamlit_highcharts(chartDef,640)
+    data=hg.streamlit_highcharts(chartDef,200)
     st.markdown("##")
     return data  
+
+
+
+
+def get_transaction_trends():
+    conn = get_connection()
+    
+    # Mengambil total penjualan per tanggal
+    query=("""
+        SELECT date as tanggal, SUM(total) as total 
+        FROM trans_master 
+        GROUP BY tanggal 
+        ORDER BY tanggal DESC LIMIT 7
+    """)
+  
+    df = pd.read_sql(query, conn)
+    conn.close()
+    return df
+
+def show_transaction_charts():
+    df_trend = get_transaction_trends()
+    
+    if not df_trend.empty:
+        st.subheader("📈 Tren Penjualan (7 Hari Terakhir)")
+        
+        # Pengaturan Warna Tema
+        neon_color = "#00f2ff" # Cyan Neon
+        grid_color = "#31333f" # Warna garis tipis agar tidak mengganggu
+        
+        chart = alt.Chart(df_trend).mark_area(
+            line={'color': neon_color},
+            color=alt.Gradient(
+                gradient='linear',
+                stops=[alt.GradientStop(color=neon_color, offset=0),
+                       alt.GradientStop(color='transparent', offset=1)],
+                x1=1, x2=1, y1=1, y2=0
+            ),
+            interpolate='monotone' # Membuat garis melengkung halus
+        ).encode(
+            x=alt.X('tanggal:T', title='Tanggal', axis=alt.Axis(grid=False, labelAngle=-45, labelColor='white', titleColor='white')),
+            y=alt.Y('total:Q', title='Total Penjualan (Rp)', axis=alt.Axis(grid=True, gridColor=grid_color, labelColor='white', titleColor='white')),
+            tooltip=['tanggal', 'total']
+        ).properties(
+            height=300,
+            background='transparent' # Menyatu dengan tema Streamlit
+        ).configure_view(
+            strokeWidth=0 # Menghapus border kotak
+        ).interactive()
+
+        st.altair_chart(chart, width='stretch')
+    else:
+        st.info("Belum ada data transaksi untuk ditampilkan.")
+
+def show_top_products_chart():
+    conn = get_connection()
+    query = "SELECT product_name, SUM(qty) as jumlah FROM trans_detail GROUP BY product_name ORDER BY jumlah DESC LIMIT 5"
+    zx = pd.read_sql(query, conn)
+    conn.close()
+
+    if not zx.empty:
+        st.subheader("🏆 Top 5 Produk Terlaris")
+        
+        bar_chart = alt.Chart(zx).mark_bar(
+            cornerRadiusEnd=10,
+            color=alt.Gradient(
+                gradient='linear',
+                stops=[alt.GradientStop(color='#7000ff', offset=0), # Ungu
+                       alt.GradientStop(color='#00d4ff', offset=1)]  # Biru
+            )
+        ).encode(
+            x=alt.X("jumlah:Q", title="Jumlah Terjual", axis=alt.Axis(labelColor='white', titleColor='white')),
+            y=alt.Y("product_name:N", sort="-x", title="Nama Produk", axis=alt.Axis(labelColor='white', titleColor='white')),
+            tooltip=['product_name', 'jumlah']
+        ).properties(
+            height=300,
+            background='transparent'
+        ).configure_view(
+            strokeOpacity=0
+        )
+
+        st.altair_chart(bar_chart, width='stretch')
 
 def graph_bar():
     
@@ -392,6 +413,7 @@ def graph_bar():
     body_text = get_contrast_color(t['body_color'])
     btn_text_hover = get_contrast_color(t['bg_color'])
     warna_bg = get_contrast_color(t['top_bar'])
+    asli_top_bar = t['top_bar']
 
     conn = get_connection()    
 
@@ -399,35 +421,61 @@ def graph_bar():
     zx = pd.read_sql(query, conn)
 
 
-    st.subheader("Category by Quantity")
+    st.subheader("Product by Quantity")
     source = pd.DataFrame({
     "Quantity ($)": zx["jumlah"],
     "Product Name": zx["product_name"]
     })
 
-    bar_chart = alt.Chart(source).mark_bar().encode(
-    x="sum(Quantity ($)):Q",
-    y=alt.Y("Product Name:N", sort="-x")
+    # Tentukan warna background sesuai tema (misal: transparan atau biru gelap)
+    bg_color = "transparent" # atau gunakan kode hex seperti "#0e1117"
+    text_color = "#FFFFFF"   # Warna teks agar kontras
 
+    bar_chart = alt.Chart(source).mark_bar(
+        #color='#00d4ff',      # Warna bar (biru neon)
+        color=asli_top_bar,
+        cornerRadiusEnd=5     # Membuat ujung bar melengkung (elegan)
+    ).encode(
+        x=alt.X("sum(Quantity ($)):Q", title="Total Quantity", axis=alt.Axis(labelColor=text_color, titleColor=text_color)),
+        y=alt.Y("Product Name:N", sort="-x", title="Product", axis=alt.Axis(labelColor=text_color, titleColor=text_color))
+    ).properties(
+        width='container',    # Menyesuaikan lebar
+        height=300,
+        background=bg_color   # MENGATUR BACKGROUND DI SINI
+    ).configure_view(
+        strokeOpacity=0       # Menghilangkan garis tepi kotak grafik
+    ).configure_axis(
+        grid=False            # Menghilangkan garis kotak-kotak di belakang (lebih bersih)
     )
-    st.altair_chart(bar_chart, width='stretch') #,theme=theme_plotly,)
+
+    st.altair_chart(bar_chart, width='stretch')
 
 def show_dashboard():
     st.markdown(f"<h1 style='color:var(--primary); font-family:Orbitron;'>CORE DASHBOARD</h1>", unsafe_allow_html=True)
     t = st.session_state.theme
     conn = get_connection()    
 
-    if st.session_state.user_role == 'Admin':
+    coll1,coll2=st.columns(2)
 
-        coll1,coll2=st.columns(2)
+    with coll1:
+        
+        graph_bar()
+        show_transaction_charts()
 
-        with coll1:
-            st.subheader("Product and Make by Quantity")
-            graph_packedbubble()
+      
+        
 
-        with coll2:
-            graph_bar()
-    st.markdown("##")
+
+    with coll2:    
+        st.subheader("Product and Make by Quantity")
+        graph_packedbubble()          
+        
+        
+        show_top_products_chart()
+
+        
+
+        
 
     
 
@@ -667,9 +715,12 @@ def show_activity_logs():
     t = st.session_state.theme
     st.markdown(f"<h2 style='color:{t['primary_color']}; font-family:Orbitron;'>🖥️ SYSTEM ACTIVITY LOG</h2>", unsafe_allow_html=True)
     
+
+
     conn = get_connection()
+    #query = conn.cursor()
     # Ambil 50 aktivitas terbaru
-    query = "SELECT username as USER, action as AKTIVITAS, timestamp as WAKTU FROM user_logs ORDER BY id DESC LIMIT 50"
+    query =("SELECT username as USER, action as AKTIVITAS, timestamp as WAKTU FROM user_logs ORDER BY id DESC LIMIT 50")
     df_logs = pd.read_sql(query, conn)
     conn.close()
 
@@ -679,7 +730,7 @@ def show_activity_logs():
         
         if st.button("🗑️ BERSIHKAN LOG LAMA"):
             # Opsi untuk menghapus log jika sudah terlalu penuh
-            conn = sqlite3.connect("inventory.db")
+            conn = get_connection()
             conn.execute("DELETE FROM activity_logs")
             conn.commit()
             conn.close()
@@ -983,39 +1034,39 @@ def play_tech_chime():
     """
     st.components.v1.html(audio_html, height=0)
 
-def play_ai_voice_feminin(text):
+def play_ai_voice_premium(text):
     js_code = f"""
         <script>
-        function speak() {{
-            var msg = new SpeechSynthesisUtterance("{text}");
-            var voices = window.speechSynthesis.getVoices();
+        function speakNow() {{
+            const msg = new SpeechSynthesisUtterance("{text}");
+            const voices = window.speechSynthesis.getVoices();
             
-            // Kriteria pencarian suara: Indonesia + (Gadis / Google / Female)
-            var selectedVoice = voices.find(function(v) {{
-                return v.lang.includes('id') && 
-                       (v.name.includes('Gadis') || v.name.includes('Google') || v.name.includes('Indonesian'));
-            }});
+            // MENCARI SUARA GOOGLE INDONESIA (Reguler/Natural)
+            // Biasanya bernama 'Google Bahasa Indonesia'
+            let selectedVoice = voices.find(v => v.name === 'Google Bahasa Indonesia');
+            
+            // Fallback jika Google Voice tidak ditemukan (pakai ID umum)
+            if (!selectedVoice) {{
+                selectedVoice = voices.find(v => v.lang.includes('id-ID'));
+            }}
 
             if (selectedVoice) {{
                 msg.voice = selectedVoice;
             }}
 
-            // Paksa pitch lebih tinggi agar tetap feminin jika suara default terpilih
-            msg.pitch = 1.3; 
-            msg.rate = 0.9;
+            // PENGATURAN AGAR TIDAK KAKU
+            msg.pitch = 1.0;  // Normal (tidak terlalu tinggi/rendah)
+            msg.rate = 1.0;   // Kecepatan normal manusia bercakap
+            msg.volume = 1.0;
             msg.lang = 'id-ID';
-            
+
             window.speechSynthesis.speak(msg);
         }}
 
-        // Menangani delay loading suara di browser
-        if (window.speechSynthesis.onvoiceschanged !== undefined) {{
-            window.speechSynthesis.onvoiceschanged = speak;
-        }}
-        
-        // Coba jalankan langsung jika sudah termuat
-        if (window.speechSynthesis.getVoices().length > 0) {{
-            speak();
+        if (window.speechSynthesis.getVoices().length === 0) {{
+            window.speechSynthesis.onvoiceschanged = speakNow;
+        }} else {{
+            speakNow();
         }}
         </script>
     """
@@ -1046,7 +1097,7 @@ def check_low_stock_alerts(threshold=5):
         
         #play_ai_voice(pesan)
         #play_tech_chime()
-        play_ai_voice_feminin(pesan)
+        play_ai_voice_premium(pesan)
         
         # UI Alert yang cantik
         st.toast(f"🚨 {pesan}", icon="⚠️")
@@ -1244,6 +1295,226 @@ def show_forecasting():
     st.plotly_chart(fig, width='stretch')
     st.markdown('</div>', unsafe_allow_html=True)
 
+# --- FUNGSI SUARA PREMIUM ---
+def play_ai_voice_premiumx(text):
+    # Menggunakan suara yang lebih jernih dengan kontrol pitch yang pas
+    js_code = f"""
+        <script>
+        function speakNow() {{
+            const msg = new SpeechSynthesisUtterance("{text}");
+            
+            // Mengambil semua daftar suara yang tersedia di sistem/browser
+            const voices = window.speechSynthesis.getVoices();
+            
+            // Mencari suara wanita Indonesia dengan urutan prioritas:
+            // 1. Google Bahasa Indonesia (Sangat jernih)
+            // 2. Microsoft Gadis (Natural)
+            // 3. Indonesian Standard
+            const femaleVoice = voices.find(v => 
+                v.lang.includes('id') && 
+                (v.name.includes('Google') || v.name.includes('Gadis') || v.name.includes('Siti'))
+            );
+
+            if (femaleVoice) {{
+                msg.voice = femaleVoice;
+            }}
+
+            // PENGATURAN KARAKTER SUARA
+            msg.pitch = 1.3;  // Skala 0 - 2. Angka 1.3 memberikan kesan lebih feminin/lembut
+            msg.rate = 0.95;  // Kecepatan sedikit dikurangi (normal = 1.0) agar artikulasi jelas
+            msg.volume = 1.0; // Volume maksimal
+            msg.lang = 'id-ID';
+
+            window.speechSynthesis.speak(msg);
+        }}
+
+        // Mengatasi masalah daftar suara yang belum dimuat (Asynchronous)
+        if (window.speechSynthesis.getVoices().length === 0) {{
+            window.speechSynthesis.onvoiceschanged = speakNow;
+        }} else {{
+            speakNow();
+        }}
+        </script>
+    """
+    st.components.v1.html(js_code, height=0)
+
+
+
+def get_next_id():
+    with get_connection() as conn:
+        res = conn.execute("SELECT MAX(id) FROM products").fetchone()[0]
+    return (res + 1) if res else 1
+
+def show_category_ui():
+    # Menggunakan koneksi database
+    with get_connection() as conn:
+        df_c = pd.read_sql("SELECT id AS 'ID', name AS 'Nama Kategori' FROM categories", conn)
+    
+    st.subheader("Daftar Kategori")
+    # Menampilkan tabel statis yang bersih
+    st.dataframe(df_c, use_container_width=True, hide_index=True)
+
+    c_add, c_edit = st.columns(2)
+    
+    # --- BAGIAN TAMBAH KATEGORI ---
+    with c_add:
+        with st.container(border=True):
+            st.write("**Tambah Kategori**")
+            new_cat = st.text_input("Nama Kategori Baru", key="input_new_cat")
+            if st.button("Simpan Kategori", use_container_width=True):
+                if new_cat:
+                    try:
+                        with get_connection() as conn:
+                            conn.execute("INSERT INTO categories (name) VALUES (?)", (new_cat,))
+                            conn.commit()
+                        play_ai_voice_premium(f"Kategori {new_cat} berhasil ditambahkan.")
+                        st.success("Tersimpan!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    except:
+                        st.error("Nama kategori sudah ada!")
+                else:
+                    st.warning("Isi nama kategori!")
+
+    # --- BAGIAN EDIT & HAPUS KATEGORI ---
+    with c_edit:
+        with st.container(border=True):
+            st.write("**Modifikasi Kategori**")
+            cat_options = df_c['Nama Kategori'].tolist()
+            target_cat = st.selectbox("Pilih Kategori", cat_options, index=None, placeholder="Pilih...", key="select_edit_cat")
+            
+            if target_cat:
+                rename_cat = st.text_input("Ganti Nama", value=target_cat, key=f"rename_{target_cat}")
+                
+                col_u, col_d = st.columns(2)
+                
+                # Logika Update Nama Kategori & Produk Terkait
+                if col_u.button("Update", use_container_width=True):
+                    with get_connection() as conn:
+                        # Update tabel kategori
+                        conn.execute("UPDATE categories SET name=? WHERE name=?", (rename_cat, target_cat))
+                        # Update semua produk yang menggunakan kategori lama ini (Relasi Sinkron)
+                        conn.execute("UPDATE products SET category=? WHERE category=?", (rename_cat, target_cat))
+                        conn.commit()
+                    play_ai_voice_premium("Kategori berhasil diperbarui.")
+                    st.rerun()
+                
+                # Logika Hapus dengan Proteksi Relasi
+                if col_d.button("Hapus", use_container_width=True, type="primary"):
+                    with get_connection() as conn:
+                        # Cek apakah ada produk yang masih memakai kategori ini
+                        count = conn.execute("SELECT COUNT(*) FROM products WHERE category=?", (target_cat,)).fetchone()[0]
+                        
+                        if count > 0:
+                            st.error(f"Ditolak! {count} produk masih menggunakan kategori ini.")
+                            play_ai_voice_premium("Kategori tidak bisa dihapus karena masih digunakan oleh produk.")
+                        else:
+                            conn.execute("DELETE FROM categories WHERE name=?", (target_cat,))
+                            conn.commit()
+                            play_ai_voice_premium(f"Kategori {target_cat} dihapus.")
+                            st.rerun()
+
+def show_inventory_system():
+    t = st.session_state.theme
+    st.markdown(f"<h2 style='color:{t['primary_color']}; font-family:Orbitron;'>🏬 INVENTORY CONTROL</h2>", unsafe_allow_html=True)
+    
+    # 1. Inisialisasi Session State agar form tidak tertutup saat klik tombol
+    if 'editing_product' not in st.session_state:
+        st.session_state.editing_product = None
+    if 'last_action' not in st.session_state:
+        st.session_state.last_action = None
+
+    tab_prod, tab_cat = st.tabs(["📦 MANAJEMEN PRODUK", "🗂️ MANAJEMEN KATEGORI"])
+
+    # ================= TAB 1: MANAJEMEN PRODUK =================
+    with tab_prod:
+        # Load kategori dari DB
+        with get_connection() as conn:
+            cat_list = pd.read_sql("SELECT name FROM categories", conn)['name'].tolist()
+        
+        # --- SUB-TAB: TAMBAH PRODUK ---
+        with st.expander("➕ TAMBAH PRODUK BARU", expanded=False):
+            next_id = get_next_id()
+            with st.form("add_product_form", clear_on_submit=True):
+                col1, col2 = st.columns(2)
+                p_name = col1.text_input("Nama Produk")
+                p_cat = col1.selectbox("Kategori", options=cat_list if cat_list else ["Lainnya"])
+                p_cost = col2.number_input("Harga Modal (Rp)", min_value=0)
+                p_price = col2.number_input("Harga Jual (Rp)", min_value=0)
+                p_stock = col2.number_input("Stok Awal", min_value=0)
+                p_barcode = col1.text_input("Barcode")
+                
+                if st.form_submit_button("SIMPAN PRODUK", use_container_width=True):
+                    if p_price >= p_cost and p_name:
+                        with get_connection() as conn:
+                            conn.execute("INSERT INTO products VALUES (?,?,?,?,?,?,?)", 
+                                         (next_id, p_name, p_cat, p_price,p_stock, p_barcode,p_cost))
+                            conn.commit()
+                        play_ai_voice_premium(f"Produk {p_name} berhasil disimpan.")
+                        st.success("Tersimpan!")
+                        st.rerun()
+                    else:
+                        st.error("Periksa nama dan margin harga!")
+
+        # --- SUB-TAB: DAFTAR & EDIT ---
+        st.subheader("Daftar & Edit Produk")
+        with get_connection() as conn:
+            df_p = pd.read_sql("SELECT * FROM products", conn)
+        
+        # Menggunakan session state untuk selectbox agar tetap terpilih
+        selected_name = st.selectbox(
+            "Pilih Produk", 
+            df_p['name'].tolist(), 
+            index=None, 
+            placeholder="Cari produk..."
+        )
+
+        if selected_name:
+            # Simpan data ke session state agar stabil
+            st.session_state.editing_product = df_p[df_p['name'] == selected_name].iloc[0].to_dict()
+            p = st.session_state.editing_product
+
+            with st.container(border=True):
+                c_a, c_b = st.columns(2)
+                # Gunakan key unik dari ID agar tidak tertukar di memory
+                u_name = c_a.text_input("Nama", value=p['name'], key=f"edit_nm_{p['id']}")
+                u_cat = c_a.selectbox("Kategori", cat_list, index=cat_list.index(p['category']) if p['category'] in cat_list else 0, key=f"edit_ct_{p['id']}")
+                u_cost = c_b.number_input("Modal", value=float(p['cost_price']), key=f"edit_cs_{p['id']}")
+                u_price = c_b.number_input("Jual", value=float(p['price']), key=f"edit_pr_{p['id']}")
+                u_stock = c_b.number_input("Stok", value=int(p['stock']), key=f"edit_st_{p['id']}")
+                
+                col_btn1, col_btn2 = st.columns(2)
+                
+                if col_btn1.button("💾 UPDATE", use_container_width=True):
+                    if u_price >= u_cost:
+                        with get_connection() as conn:
+                            conn.execute("""UPDATE products SET name=?, category=?, price=?, cost_price=?, stock=? 
+                                         WHERE id=?""", (u_name, u_cat, u_price, u_cost, u_stock, p['id']))
+                            conn.commit()
+                        play_ai_voice_premium(f"Data {u_name} berhasil diperbarui. Check Baby check wan thru trhee")
+                        st.success("Update Berhasil!")
+                        time.sleep(0.5)
+                        st.rerun()
+
+                if col_btn2.button("🗑️ DELETE", use_container_width=True, type="primary"):
+                    with get_connection() as conn:
+                        # Cek relasi child table (trans_detail)
+                        rel = conn.execute("SELECT COUNT(*) FROM trans_detail WHERE product_id=?", (p['id'],)).fetchone()[0]
+                        if rel > 0:
+                            st.error(f"Gagal! Ada {rel} transaksi terkait.")
+                            play_ai_voice_premium("Penghapusan ditolak karena relasi transaksi.")
+                        else:
+                            conn.execute("DELETE FROM products WHERE id=?", (p['id'],))
+                            conn.commit()
+                            st.success("Terhapus!")
+                            time.sleep(0.5)
+                            st.rerun()
+
+    # ================= TAB 2: MANAJEMEN KATEGORI =================
+    with tab_cat:
+        # (Logika kategori tetap sama, namun gunakan st.rerun() setelah commit)
+        show_category_ui() # Fungsi kategori dipisah agar rapi
+
 # (Main Routing Logic tetap sama seperti sebelumnya)
 def app_supermarket():
     st.set_page_config(page_title="FutureMart 2026", layout="wide")
@@ -1324,9 +1595,10 @@ def app_supermarket():
             st.write(f"User: **{st.session_state.username}** ({st.session_state.user_role})")
             
             # Dynamic Menu based on Role
-            menu_options = ["Dashboard", "Transaction","Riwayat", "Cari Produk",  "Settings"]
+            menu_options = ["Dashboard", "Transaction","Riwayat", "Cari Produk",  "Settings",
+                            "Forecasting", "Inventory system"]
             if st.session_state.user_role == 'Admin':
-                menu_options += ["Forecasting", "Inventory",
+                menu_options += [
                             "Laporan Keuangan", "Backup_DB_Online", 
                             "Accounting", "User Mgmt","Activity Logs"]
 
@@ -1347,7 +1619,7 @@ def app_supermarket():
         elif menu == "Forecasting": show_forecasting()
             #st.write("Forecasting (Admin Only)")
         elif menu == "Transaction": show_pos()
-        elif menu == "Inventory": show_inventory()
+        elif menu == "Inventory system": show_inventory_system()
         elif menu == "Riwayat": show_transaction_history()
         elif menu == "Cari Produk": show_product_search()
         elif menu == "Laporan Keuangan": show_financial_report()
