@@ -18,9 +18,7 @@ import streamlit.components.v1 as components
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 import time
-
-
-  
+import streamlit_antd_components as sac
 
 
 #if os.path.exists('dblite/supermarket.db'):
@@ -158,13 +156,7 @@ def apply_theme():
 
         
         
-       /* Semua teks di dalam sidebar (label, radio, p) mengikuti kontras */
-        [data-testid="stSidebar"] .stMarkdown, 
-        [data-testid="stSidebar"] label, 
-        [data-testid="stSidebar"] p,
-        [data-testid="stSidebar"] .stRadio label {{
-            color: {sidebar_text} !important;
-        }}
+
 
         /* 3. INPUT FIELD (Agar tetap terbaca) */
         .stTextInput input, .stSelectbox select {{
@@ -274,11 +266,13 @@ def graph_packedbubble():
     btn_text_hover = get_contrast_color(t['bg_color'])
     warna_bg = get_contrast_color(t['top_bar'])
 
+    st.markdown(f"<h5 style='color:{t['primary_color']}; font-family:Orbitron;'>Product, make by Quantity</h5>", unsafe_allow_html=True)
+
     conn = get_connection()    
     #zx = pd.read_sql("select product_name, category,sum(qty) as jumlah from trans_detail group by product_name,category", conn)
     query = "select category,product_name,sum(qty) as jumlah from trans_detail group by category, product_name"
     zx = pd.read_sql(query, conn)
-
+    
     #result= query.fetch_veh_graph()
     df=pd.DataFrame(zx, columns=['product_name','category','jumlah'])
     # 2. Transform DataFrame into Highcharts series format
@@ -291,9 +285,16 @@ def graph_packedbubble():
         #chart_data = [{'product_name': point['product_name'],'name': point['name'], 'value': point['value']} for point in data_points]
         
     # 3. Define Chart Configuration
-    chartDef = { 'chart': { 'height': '60%',
+    chartDef = { 'chart': { 'height': '60%', 'height': '60%',
                 'type': 'packedbubble',
-                'backgroundColor': t['top_bar']},
+                'backgroundColor': t['body_color']},    
+                'title': { 
+                    'text': 'Product and Category', # <-- Judul Anda di sini
+                    'style': {
+                        'color': 'black',                 # Opsional: Sesuaikan warna teks judul
+                        'fontWeight': 'bold'
+                    }
+                },                            
     'plotOptions': { 'packedbubble': { 'dataLabels': { 'enabled': True,
                                                         #'filter': { 'operator': '>',
                                                         #            'property': 'y'
@@ -314,7 +315,7 @@ def graph_packedbubble():
                                         'zMin': 0}},
     'series': chart_data
     }            
-    data=hg.streamlit_highcharts(chartDef,200)
+    data=hg.streamlit_highcharts(chartDef,300)
     st.markdown("##")
     return data  
 
@@ -339,9 +340,13 @@ def get_transaction_trends():
 def show_transaction_charts():
     df_trend = get_transaction_trends()
     
+    
     if not df_trend.empty:
-        st.subheader("📈 Tren Penjualan (7 Hari Terakhir)")
-        
+
+        #st.subheader("📈 Tren Penjualan (7 Hari Terakhir)")
+        t = st.session_state.theme
+        st.markdown(f"<h5 style='color:{t['primary_color']}; font-family:Orbitron;'>📈 Penjualan (7 Hari Terakhir)</h5>", unsafe_allow_html=True)
+
         # Pengaturan Warna Tema
         neon_color = "#00f2ff" # Cyan Neon
         grid_color = "#31333f" # Warna garis tipis agar tidak mengganggu
@@ -356,8 +361,8 @@ def show_transaction_charts():
             ),
             interpolate='monotone' # Membuat garis melengkung halus
         ).encode(
-            x=alt.X('tanggal:T', title='Tanggal', axis=alt.Axis(grid=False, labelAngle=-45, labelColor='white', titleColor='white')),
-            y=alt.Y('total:Q', title='Total Penjualan (Rp)', axis=alt.Axis(grid=True, gridColor=grid_color, labelColor='white', titleColor='white')),
+            x=alt.X('tanggal:T', title='Tanggal', axis=alt.Axis(grid=False, labelAngle=-45, labelColor='black', titleColor='black')),
+            y=alt.Y('total:Q', title='Total Penjualan (Rp)', axis=alt.Axis(grid=True, gridColor=grid_color, labelColor='black', titleColor='black')),
             tooltip=['tanggal', 'total']
         ).properties(
             height=300,
@@ -376,19 +381,22 @@ def show_top_products_chart():
     zx = pd.read_sql(query, conn)
     conn.close()
 
+    t = st.session_state.theme    
+    st.markdown(f"<h5 style='color:{t['primary_color']}; font-family:Orbitron;'>🏆 Top 5 Produk Terlaris</h5>", unsafe_allow_html=True)
+
     if not zx.empty:
-        st.subheader("🏆 Top 5 Produk Terlaris")
-        
+        #st.subheader("🏆 Top 5 Produk Terlaris")
+                
         bar_chart = alt.Chart(zx).mark_bar(
-            cornerRadiusEnd=10,
-            color=alt.Gradient(
-                gradient='linear',
-                stops=[alt.GradientStop(color='#7000ff', offset=0), # Ungu
-                       alt.GradientStop(color='#00d4ff', offset=1)]  # Biru
-            )
+            cornerRadiusTopLeft=10,
+            cornerRadiusTopRight=10
         ).encode(
-            x=alt.X("jumlah:Q", title="Jumlah Terjual", axis=alt.Axis(labelColor='white', titleColor='white')),
-            y=alt.Y("product_name:N", sort="-x", title="Nama Produk", axis=alt.Axis(labelColor='white', titleColor='white')),
+            x=alt.X("product_name:N", sort="-y", title="Nama Produk", 
+                    axis=alt.Axis(labelColor='black', titleColor='black', labelAngle=-45)),
+            y=alt.Y("jumlah:Q", title="Jumlah Terjual", 
+                    axis=alt.Axis(labelColor='black', titleColor='black')),
+            # Menambahkan warna berbeda untuk setiap produk
+            color=alt.Color("product_name:N", legend=None, scale=alt.Scale(scheme='tableau20')),
             tooltip=['product_name', 'jumlah']
         ).properties(
             height=300,
@@ -397,7 +405,7 @@ def show_top_products_chart():
             strokeOpacity=0
         )
 
-        st.altair_chart(bar_chart, width='stretch')
+        st.altair_chart(bar_chart, use_container_width=True, theme=None)
 
 def graph_bar():
     
@@ -417,27 +425,32 @@ def graph_bar():
 
     conn = get_connection()    
 
-    query = "select product_name,sum(qty) as jumlah from trans_detail group by product_name"
+    query = "select category,sum(qty) as jumlah from trans_detail group by category"
     zx = pd.read_sql(query, conn)
 
+    t = st.session_state.theme    
+    st.markdown(f"<h5 style='color:{t['primary_color']}; font-family:Orbitron;'>Product by Quantity</h5>", unsafe_allow_html=True)
 
-    st.subheader("Product by Quantity")
+    #st.subheader("Product by Quantity")
     source = pd.DataFrame({
     "Quantity ($)": zx["jumlah"],
-    "Product Name": zx["product_name"]
+    "Product Name": zx["category"]
     })
 
     # Tentukan warna background sesuai tema (misal: transparan atau biru gelap)
     bg_color = "transparent" # atau gunakan kode hex seperti "#0e1117"
-    text_color = "#FFFFFF"   # Warna teks agar kontras
+    text_color = warna_bg # "#FFFFFF"   # Warna teks agar kontras
 
     bar_chart = alt.Chart(source).mark_bar(
-        #color='#00d4ff',      # Warna bar (biru neon)
-        color=asli_top_bar,
+        # Hapus 'color=asli_top_bar' dari sini
         cornerRadiusEnd=5     # Membuat ujung bar melengkung (elegan)
     ).encode(
         x=alt.X("sum(Quantity ($)):Q", title="Total Quantity", axis=alt.Axis(labelColor=text_color, titleColor=text_color)),
-        y=alt.Y("Product Name:N", sort="-x", title="Product", axis=alt.Axis(labelColor=text_color, titleColor=text_color))
+        y=alt.Y("Product Name:N", sort="-x", title="Product", axis=alt.Axis(labelColor=text_color, titleColor=text_color)),
+        
+        # --- TAMBAHKAN KEMBALI COLOR DI SINI UNTUK WARNA OTOMATIS/GRADIENT ---
+        color=alt.Color("Product Name:N", legend=None) # Menggunakan nama produk sebagai kategori warna
+        # Anda juga bisa menambahkan .scale(scheme='rainbow') untuk skema warna spesifik
     ).properties(
         width='container',    # Menyesuaikan lebar
         height=300,
@@ -450,8 +463,13 @@ def graph_bar():
 
     st.altair_chart(bar_chart, width='stretch')
 
+
+
+
 def show_dashboard():
-    st.markdown(f"<h1 style='color:var(--primary); font-family:Orbitron;'>CORE DASHBOARD</h1>", unsafe_allow_html=True)
+    t = st.session_state.theme    
+    st.markdown(f"<h4 style='color:{t['primary_color']}; font-family:Orbitron;'>CORE DASHBOARD</h4>", unsafe_allow_html=True)
+    
     t = st.session_state.theme
     conn = get_connection()    
 
@@ -459,19 +477,18 @@ def show_dashboard():
 
     with coll1:
         
-        graph_bar()
-        show_transaction_charts()
+        show_top_products_chart()
+        graph_packedbubble() 
 
       
         
 
 
     with coll2:    
-        st.subheader("Product and Make by Quantity")
-        graph_packedbubble()          
-        
-        
-        show_top_products_chart()
+        #st.subheader("Product and Make by Quantity")
+        show_transaction_charts()         
+        graph_bar()
+ 
 
         
 
@@ -556,99 +573,156 @@ def print_receipt_thermal(receipt_text):
     components.html(receipt_html, height=80)
 
 def show_pos():
-    st.markdown("<h2 style='color:var(--primary); font-family:Orbitron;'>🛒 SMART TERMINAL</h2>", unsafe_allow_html=True)
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([2, 1, 1])
-    t_id = c1.text_input("Invoice", f"INV-{datetime.now().strftime('%y%m%d%H%M%S')}", disabled=True)
-    t_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    t_cashier = c3.text_input("Cashier", st.session_state.username)
-    st.markdown('</div>', unsafe_allow_html=True)
+    t = st.session_state.theme    
+    conn = get_connection()
     
-    conn = get_connection()    
-    # --- MEMBER IDENTIFICATION ---
-    show_pos_with_scanner()
+    # Init session state cart jika belum ada
+    if 'cart' not in st.session_state:
+        st.session_state.cart = []
+
+    # --- HEADER & INFO TRANSAKSI ---
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    m_search = st.text_input("Input No. Member (Kosongkan jika Non-Member)", placeholder="Contoh: 0812345678")
+    header_col1, header_col2, header_col3 = st.columns([1.5, 1.5, 1])
+    with header_col1:
+        t_id_preview = f"INV-{datetime.now().strftime('%y%m%d%H%M%S')}"
+        st.text_input("Invoice ID", t_id_preview, disabled=True)
+    with header_col2:
+        m_search = st.text_input("No. Member (Opsional)", placeholder="0812345678")
+    with header_col3:
+        st.text_input("Cashier", st.session_state.username, disabled=True)
+    
+    # Validasi Member
     member_data = None
     if m_search:
         res = pd.read_sql("SELECT * FROM members WHERE phone=?", conn, params=[m_search])
         if not res.empty:
             member_data = res.iloc[0]
-            st.markdown(f'<span class="member-badge">⭐ MEMBER: {member_data["name"]} | Poin: {member_data["points"]}</span>', unsafe_allow_html=True)
+            st.markdown(f'''<div style="background: rgba(0, 212, 255, 0.1); padding: 10px; border-radius: 5px; border-left: 5px solid #00d4ff; margin-bottom:10px;">
+                <span style="color: #00d4ff; font-weight: bold;">⭐ MEMBER:</span> {member_data["name"]} | <b>Poin: {member_data["points"]}</b>
+            </div>''', unsafe_allow_html=True)
         else:
-            st.warning("Member tidak ditemukan")
+            st.error("⚠️ Member tidak ditemukan")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- TRANSACTION ---
+        # --- INPUT PRODUK ---
     df_p = pd.read_sql("SELECT * FROM products WHERE stock > 0", conn)
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([3, 1, 1])
-    sel_p = col1.selectbox("Cari Produk", df_p['name'])
-    p_data = df_p[df_p['name'] == sel_p].iloc[0]
-    col2.write(f"Price: **{p_data['price']:,.0f}**")    
-    p_info = df_p[df_p['name'] == sel_p].iloc[0]
-    qty = col3.number_input("Qty", min_value=1, max_value=int(p_info['stock']), value=1)
-    if col3.button("➕ TAMBAH"):
-        st.session_state.cart.append({'Product': sel_p, 'Category': p_data['category'], 'Qty': qty, 'Price': p_info['price'], 'Subtotal': qty * p_info['price']})
+    
+    # Mengatur rasio kolom agar Qty dan Tombol lebih pas (kecil)
+    col_prod, col_price, col_qty, col_btn = st.columns([2.5, 1, 0.8, 1])
+    
+    with col_prod:
+        sel_p = st.selectbox("Cari Produk", df_p['name'], index=None, placeholder="Pilih item...")
+    
+    if sel_p:
+        p_data = df_p[df_p['name'] == sel_p].iloc[0]
+        with col_price:
+            st.metric("Harga", f"{p_data['price']:,.0f}")
+        
+        with col_qty:
+            # Komponen Qty
+            qty = st.number_input("Qty", min_value=1, max_value=int(p_data['stock']), value=1)
+            
+        with col_btn:
+            # Trik: Memberikan spasi vertikal agar tombol turun sejajar dengan input Qty
+            st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
+            if st.button("➕ TAMBAH", use_container_width=True, type="primary"):
+                st.session_state.cart.append({
+                    'Product': sel_p, 
+                    'Category': p_data['category'], 
+                    'Qty': qty, 
+                    'Price': p_data['price'], 
+                    'Subtotal': qty * p_data['price']
+                })
+                st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # --- KERANJANG BELANJA & MANAJEMEN ITEM ---
     if st.session_state.cart:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        df_cart = pd.DataFrame(st.session_state.cart)
-        st.table(df_cart)
+        #st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        #st.subheader("🛒 Detail Pesanan")
         
-        subtotal = sum(i['Subtotal'] for i in st.session_state.cart)
+        # Header Tabel Custom
+        h_col1, h_col2, h_col3, h_col4, h_col5 = st.columns([2, 0.5, 1, 1, 0.5])
+        h_col1.caption("PRODUK")
+        h_col2.caption("QTY")
+        h_col3.caption("HARGA")
+        h_col4.caption("TOTAL")
+        h_col5.caption("AKSI")
+        
+        subtotal = 0
+        for idx, item in enumerate(st.session_state.cart):
+            b_col1, b_col2, b_col3, b_col4, b_col5 = st.columns([2, 0.5, 1, 1, 0.5])
+            b_col1.write(f"**{item['Product']}**")
+            b_col2.write(str(item['Qty']))
+            b_col3.write(f"{item['Price']:,.0f}")
+            b_col4.write(f"{item['Subtotal']:,.0f}")
+            if b_col5.button("🗑️", key=f"del_{idx}"):
+                st.session_state.cart.pop(idx)
+                st.rerun()
+            subtotal += item['Subtotal']
+
+        st.divider()
+        
+        # --- PEMBAYARAN & DISKON ---
+        pay_col1, pay_col2 = st.columns([2, 1])
         final_discount = 0
         
-        # Pilihan Tukar Poin
-        if member_data and member_data['points'] > 0:
-            use_points = st.checkbox(f"Gunakan Poin sebagai Diskon? (Maks: {member_data['points']})")
-            if use_points:
-                final_discount = member_data['points']
-                st.info(f"Diskon Poin Applied: -Rp {final_discount:,.0f}")
+        with pay_col1:
+            if member_data and member_data['points'] > 0:
+                use_points = st.checkbox(f"Gunakan Poin sebagai Diskon? (Maks: {member_data['points']})")
+                if use_points:
+                    final_discount = member_data['points']
+                    st.info(f"Potongan Poin: -Rp {final_discount:,.0f}")
+            
+            if st.button("🚫 KOSONGKAN KERANJANG", type="secondary"):
+                st.session_state.cart = []
+                st.rerun()
 
         grand_total = subtotal - final_discount
-        st.markdown(f"### GRAND TOTAL: Rp {grand_total:,.0f}")
+        with pay_col2:
+            st.markdown(f"<h3 style='text-align:right; margin:0;'>TOTAL AKHIR</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h1 style='text-align:right; color:#00d4ff; margin:0;'>Rp {grand_total:,.0f}</h1>", unsafe_allow_html=True)
         
-        if st.button("KONFIRMASI PEMBAYARAN", width='stretch'):
+        st.write("##")
+        if st.button("🚀 PROSES PEMBAYARAN SEKARANG", use_container_width=True, type="primary"):
             c = conn.cursor()
-            t_id = f"TRX-{datetime.now().strftime('%y%m%d%H%M%S')}"
+            t_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
-            # 1. Simpan Transaksi
+            # Simpan Transaksi
             c.execute("INSERT INTO trans_master VALUES (?,?,?,?,?,?)", 
-                      (t_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), grand_total, st.session_state.username, final_discount, m_search))
+                      (t_id_preview, t_date, grand_total, st.session_state.username, final_discount, m_search))
 
-            # 2. Update Stok & Hitung Poin Baru (1% dari belanja)
             new_points_earned = int(grand_total * 0.01)
             for i in st.session_state.cart:
                 c.execute("UPDATE products SET stock = stock - ? WHERE name = ?", (i['Qty'], i['Product']))
-                c.execute("INSERT INTO trans_detail VALUES (?,?,?,?,?,?,?)", (t_id, i['Product'], i['Category'], i['Qty'], i['Price'], i['Subtotal'], 0))
-            # 3. Update Poin Member
+                c.execute("INSERT INTO trans_detail VALUES (?,?,?,?,?,?,?)", (t_id_preview, i['Product'], i['Category'], i['Qty'], i['Price'], i['Subtotal'], 0))
+            
             if member_data is not None:
                 point_change = new_points_earned - (final_discount if use_points else 0)
                 c.execute("UPDATE members SET points = points + ? WHERE phone = ?", (point_change, m_search))
             
             conn.commit()
-            st.session_state.last_receipt = create_receipt_text(t_id, t_date, t_cashier, st.session_state.cart, subtotal)
+            st.session_state.last_receipt = create_receipt_text(t_id_preview, t_date, st.session_state.username, st.session_state.cart, subtotal)
             st.session_state.cart = []
-            st.success(f"Berhasil! Member mendapatkan +{new_points_earned} poin baru.")
+            st.success(f"Berhasil! Member mendapatkan +{new_points_earned} poin.")
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # --- STRUK PREVIEW ---
     if 'last_receipt' in st.session_state and st.session_state.last_receipt:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.subheader("Receipt Preview")
-        st.text(st.session_state.last_receipt)
-    
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            if st.button("🖨️ CETAK STRUK FISIK"):
-                if 'last_receipt' in st.session_state:
+        with st.expander("📄 PREVIEW STRUK", expanded=True):
+            st.code(st.session_state.last_receipt)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                if st.button("🖨️ CETAK FISIK", use_container_width=True):
                     print_receipt_thermal(st.session_state.last_receipt)
-        with c2:
-            st.download_button("📥 DOWNLOAD RECEIPT", data=st.session_state.last_receipt, file_name=f"Rec_{t_id}.txt")
-        
-        with c3:
-            if st.button("CLOSE"): st.session_state.last_receipt = None; st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+            with c2:
+                st.download_button("📥 DOWNLOAD TXT", data=st.session_state.last_receipt, file_name=f"Receipt_{datetime.now().strftime('%H%M%S')}.txt", use_container_width=True)
+            with c3:
+                if st.button("TUTUP", use_container_width=True): 
+                    st.session_state.last_receipt = None
+                    st.rerun()
 
 def get_all_users():
     conn = get_connection()
@@ -840,9 +914,14 @@ def generate_invoice_pdf(master_row, detail_df):
 
 def show_transaction_history():
     t = st.session_state.theme
-    st.markdown(f"<h2 style='color:{t['primary_color']}; font-family:Orbitron;'>📜 TRANSACTION HISTORY</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='color:{t['primary_color']}; font-family:Orbitron;'>📜 TRANSACTION HISTORY</h4>", unsafe_allow_html=True)
     
-    search_id = st.text_input("CARI ID INVOICE", placeholder="TRX-XXXX")
+    #search_id = st.text_input("CARI ID INVOICE", placeholder="TRX-XXXX")
+
+    conn = get_connection()
+    df_p = pd.read_sql("SELECT id FROM trans_master", conn)
+    search_id = st.selectbox("CARI ID INVOICE", df_p['id'], index=None, placeholder="TRX-XXXX")
+
     
     if search_id:
         conn = get_connection()
@@ -1150,6 +1229,7 @@ def show_settings():
     new_primary = c1.color_picker("Top Bar", t['top_bar'])
     new_bg = c2.color_picker("Sidebar/Base", t['bg_color'])
     new_body = c3.color_picker("Main Page Body", t['body_color'])
+    new_second = new_bg
     
     _="""
     if st.button("APPLY SETTINGS"):
@@ -1157,7 +1237,8 @@ def show_settings():
             'primary_color': new_primary, 
             'bg_color': new_bg, 
             'body_color': new_body,
-            'top_bar': new_primary
+            'top_bar': new_primary,
+            'second_color': new_second
         })
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1168,6 +1249,7 @@ def show_settings():
         st.session_state.theme['body_color'] = new_body
         st.session_state.theme['primary_color'] = new_primary
         st.session_state.theme['top_bar'] = new_primary
+        st.session_state.theme['second_color'] = new_second
         
         # PERMANENKAN KE FILE
         save_theme(st.session_state.theme)
@@ -1518,6 +1600,7 @@ def show_inventory_system():
 # (Main Routing Logic tetap sama seperti sebelumnya)
 def app_supermarket():
     st.set_page_config(page_title="FutureMart 2026", layout="wide")
+
     
     # 1. Pastikan variabel state tersedia
     if 'logged_in' not in st.session_state: st.session_state.logged_in = False
@@ -1530,12 +1613,13 @@ def app_supermarket():
             st.session_state.theme = saved_theme
         else:
             st.session_state.theme = {
-                'bg_color': '#050a12', 
-                'top_bar': '#95A5A6',
-                'body_color': '#0a101f', 
-                'primary_color': '#00fbff', 
+                'bg_color': '#adb99e', 
+                'second_color': '#adb99e', 
+                'top_bar': '#7d7f72', 
+                'body_color': '#bbc9a7', 
+                'primary_color': '#7d7f72', 
                 'font_family': 'Rajdhani', 
-                'font_size': '14px'            
+                'font_size': '16px'            
             }
 
     # 3. Pindahkan apply_theme() ke LUAR blok 'if' agar selalu dijalankan
@@ -1544,19 +1628,24 @@ def app_supermarket():
 # Inisialisasi tema dari file atau default
     if 'theme' not in st.session_state:
         saved_theme = load_theme()
+               
         if saved_theme:
             st.session_state.theme = saved_theme
         else:
             st.session_state.theme = {
-                'bg_color': '#050a12', 
-                'top_bar': '#95A5A6',
-                'body_color': '#0a101f', 
-                'primary_color': '#00fbff', 
+                'bg_color': '#adb99e', 
+                'second_color': '#adb99e', 
+                'top_bar': '#7d7f72', 
+                'body_color': '#bbc9a7', 
+                'primary_color': '#7d7f72', 
                 'font_family': 'Rajdhani', 
-                'font_size': '14px'            
+                'font_size': '16px'
             }
 
+      
     if not st.session_state.logged_in:
+   
+            
             st.components.v1.html(
                 """
                 <script>
@@ -1569,7 +1658,9 @@ def app_supermarket():
                 </script>
                 """,
                 height=0,
-            )            
+            )    
+
+   
             st.markdown("<h1 style='text-align:center;'>LOGIN SYSTEM</h1>", unsafe_allow_html=True)
             _, col, _ = st.columns([1,1,1])
             with col.form("login"):
@@ -1589,48 +1680,130 @@ def app_supermarket():
 
 
 
-    else:
+    else:          
         with st.sidebar:
-            st.markdown(f"<h1 style='color:var(--primary); font-family:Orbitron;'>FM-POS</h1>", unsafe_allow_html=True)
-            st.write(f"User: **{st.session_state.username}** ({st.session_state.user_role})")
-            
-            # Dynamic Menu based on Role
-            menu_options = ["Dashboard", "Transaction","Riwayat", "Cari Produk",  "Settings",
-                            "Forecasting", "Inventory system"]
-            if st.session_state.user_role == 'Admin':
-                menu_options += [
-                            "Laporan Keuangan", "Backup_DB_Online", 
-                            "Accounting", "User Mgmt","Activity Logs"]
 
-                                
-            menu = st.radio("Menu", menu_options)
+
+            st.markdown("""
+                <style>
+                :root {
+                    /* Tetap sinkronkan variabel jika diperlukan */
+                    --secondary-background-color: transparent !important;
+                }
+
+                /* Membuat latar belakang widget menu/input menjadi transparan */
+                div[data-baseweb="input"], 
+                div[data-baseweb="select"], 
+                div[data-baseweb="popover"], /* Menargetkan menu popover/dropdown */
+                .stSecondaryButton,
+                div[data-testid="stSidebar"] > div:first-child {
+                    background-color: transparent !important;
+                    background: transparent !important;
+                }
+
+                /* Opsional: Menghilangkan border agar benar-benar terlihat 'bersih' */
+                div[data-baseweb="input"] {
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)  
+            #st.markdown(f"<h1 style='color:var(--primary); font-family:Orbitron;'>FM-POS</h1>", unsafe_allow_html=True)
+            st.write(f"User: **{st.session_state.username}** ({st.session_state.user_role})")
+
+
+            selected = sac.menu([
+                sac.MenuItem('home', icon='house-fill'),
+                sac.MenuItem('Dashboard', icon='bar-chart-fill'),
+                sac.MenuItem('Operation', icon='box-fill', children=[
+                    sac.MenuItem('Transaction', icon='bank2'),
+                    sac.MenuItem('Log transaction', icon='git', children=[
+                        sac.MenuItem('Riwayat', icon='hourglass-split'),   
+                        sac.MenuItem('Cari Produk', icon='eye-fill'),                      
+                    ]),
+                    ]),
+                sac.MenuItem('Forecasting', icon='sliders'),
+                sac.MenuItem('Inventory system', icon='basket'),
+                sac.MenuItem('Laporan Keuangan', icon='journal-album'),
+                sac.MenuItem('Accounting', icon='book'),
+                sac.MenuItem('Activity Logs', icon='substack'),
+                sac.MenuItem('Administrator', icon='person-fill-gear', children=[
+                    sac.MenuItem('User Mgmt', icon='person-circle'),
+                    sac.MenuItem('Backup_DB_Online', icon='database-fill'),
+                    sac.MenuItem('Settings', icon='gear'),
+                    ])
+                ], variant='left-bar', color='white',)
+
+
             if st.button("LOGOUT"):
                 add_log(st.session_state.username, "LOGOUT") # <--- CATAT LOGOUT
                 st.session_state.logged_in = False
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]                
                 st.rerun()
-
-
+      
 
         # Routing Logic
-        if menu == "Dashboard": show_dashboard()
-            #st.write("Dashboard (Admin Only)")
-        elif menu == "Forecasting": show_forecasting()
-            #st.write("Forecasting (Admin Only)")
-        elif menu == "Transaction": show_pos()
-        elif menu == "Inventory system": show_inventory_system()
-        elif menu == "Riwayat": show_transaction_history()
-        elif menu == "Cari Produk": show_product_search()
-        elif menu == "Laporan Keuangan": show_financial_report()
-        elif menu == "Backup_DB_Online": show_database_tools()        
-            #st.write("Backup_DB_Online (Admin Only)")
-        elif menu == "Accounting": show_accounting() 
-            #st.write("Accounting Module (Admin Only)")
-        elif menu == "User Mgmt": show_user_mgmt()
-        elif menu == "Settings": show_settings()
-            #st.write("Settings Module (Admin Only)")
-        elif menu == "Activity Logs": show_activity_logs()    
+        match selected:
+
+
+            case "Dashboard": show_dashboard()
+                #st.write("Dashboard (Admin Only)")
+            case "Forecasting": show_forecasting()
+                #st.write("Forecasting (Admin Only)")
+            case "Transaction": show_pos()
+            case "Inventory system": show_inventory_system()
+            case "Riwayat": show_transaction_history()
+            case "Cari Produk": show_product_search()
+            case "Laporan Keuangan": show_financial_report()
+            
+                #st.write("Backup_DB_Online (Admin Only)")
+            case "Accounting": show_accounting() 
+            case "Activity Logs": show_activity_logs()    
+
+            case "User Mgmt":
+                if st.session_state.user_role == 'Admin':
+                    show_user_mgmt()
+                else:
+                     st.write("User Mgmt (Admin Only)")   
+
+            case "Settings": 
+                if st.session_state.user_role == 'Admin':
+                    show_settings()
+                else:
+                     st.write("Settings (Admin Only)")   
+            case "Backup_DB_Online":
+                if st.session_state.user_role == 'Admin':
+                    show_database_tools()
+                else:
+                     st.write("Backup_DB_Online (Admin Only)")   
+            
+            case _: st.write("Pilih menu untuk memulai.")
+
+
 
 if __name__ == "__main__":
+
+    st.markdown("""
+        <style>
+        :root {
+            /* Tetap sinkronkan variabel jika diperlukan */
+            --secondary-background-color: transparent !important;
+        }
+
+        /* Membuat latar belakang widget menu/input menjadi transparan */
+        div[data-baseweb="input"], 
+        div[data-baseweb="select"], 
+        div[data-baseweb="popover"], /* Menargetkan menu popover/dropdown */
+        .stSecondaryButton,
+        div[data-testid="stSidebar"] > div:first-child {
+            background-color: transparent !important;
+            background: transparent !important;
+        }
+
+        /* Opsional: Menghilangkan border agar benar-benar terlihat 'bersih' */
+        div[data-baseweb="input"] {
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)  
     app_supermarket()
