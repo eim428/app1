@@ -1,0 +1,34 @@
+/**
+ * Simpan file ZIP dari URL ke Google Drive
+ * - Jika FOLDER_ID diisi, file disimpan ke folder itu.
+ * - Kalau dikosongkan, file tersimpan di root My Drive.
+ */
+function saveZipsToDrive() {
+  const FILES = [
+    {
+      url: "https://fr-prod.asyncgw.teams.microsoft.com/v1/objects/0-frca-d9-2e433e2749701708a78fc16f614a546a/views/original/motor_insurance_full_bundle.zip",
+      name: "motor_insurance_full_bundle.zip"
+    },
+    // Opsional:
+    {
+      url: "https://fr-prod.asyncgw.teams.microsoft.com/v1/objects/0-frca-d4-a3f3b4e307faf458ea755c7e15b87f8d/views/original/gl_patch_bundle.zip",
+      name: "gl_patch_bundle.zip"
+    },
+    {
+      url: "https://fr-prod.asyncgw.teams.microsoft.com/v1/objects/0-frca-d11-1ca4eb755ec54df0bfc30cac8ba2e98a/views/original/gl_apply_scripts.zip",
+      name: "gl_apply_scripts.zip"
+    }
+  ];
+  const FOLDER_ID = ""; // <-- isi folder ID kalau mau
+  const folder = FOLDER_ID ? DriveApp.getFolderById(FOLDER_ID) : DriveApp.getRootFolder();
+
+  FILES.forEach(f => {
+    const resp = UrlFetchApp.fetch(f.url, { muteHttpExceptions: true, followRedirects: true });
+    if (resp.getResponseCode() >= 200 && resp.getResponseCode() < 300) {
+      const blob = resp.getBlob().setName(f.name);
+      folder.createFile(blob);
+    } else {
+      Logger.log("Gagal download: " + f.url + " — code: " + resp.getResponseCode());
+    }
+  });
+}
